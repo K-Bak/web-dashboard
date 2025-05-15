@@ -16,8 +16,8 @@ creds_dict = st.secrets["service_account"]
 credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=scope)
 client = gspread.authorize(credentials)
 
-# Projekt-dashboard
-SHEET_ID = "1hvIk4XgXjkHRCDyR8ScRNS82nDRPpsPbdASFZZdAAOE"
+# Social-dashboard
+SHEET_ID = "1hSHzko--Pnt2R6iZD_jyi-WMOycVw49snibLi575Z2M"
 worksheet = client.open_by_key(SHEET_ID).worksheet("Salg")
 df = get_as_dataframe(worksheet, evaluate_formulas=True)
 
@@ -30,12 +30,12 @@ df['Pris'] = pd.to_numeric(df['Pris'], errors='coerce')
 
 # --- Beregninger ---
 samlet = df['Pris'].sum()
-q2_maal = 72465
+q2_maal = 90880
+kendte_produkter = ["Leadpage", "Klaviyo", "Lead Ads", "Ekstra kampagne", "Xtra Visual", "SST"]
 procent = samlet / q2_maal if q2_maal else 0
-antal_solgte = len(df)
 
 # --- Ugeopsætning ---
-start_uge = df['Uge'].min()
+start_uge = 18
 slut_uge = 26
 alle_uger = list(range(start_uge, slut_uge + 1))
 
@@ -43,8 +43,8 @@ ugevis = df.groupby('Uge')['Pris'].sum().reindex(alle_uger, fill_value=0)
 ugevis.index = ugevis.index.map(lambda u: f"Uge {u}")
 
 # Layout og autorefresh
-st.set_page_config(page_title="Projekt Dashboard", layout="wide")
-st.markdown("<h1 style='text-align: center;margin-top:-50px'>Projekt - Q2 Mål</h1>", unsafe_allow_html=True)
+st.set_page_config(page_title="Social Dashboard", layout="wide")
+st.markdown("<h1 style='text-align: center;margin-top:-50px'>Social - Q2 Mål</h1>", unsafe_allow_html=True)
 from streamlit_autorefresh import st_autorefresh
 st_autorefresh(interval=300_000, key="datarefresh")
 
@@ -102,13 +102,12 @@ with col2:
         ax2.text(0, 0, f"{procent*100:.2f}%", ha='center', va='center', fontsize=20)
         st.pyplot(fig2)
 
-# --- Top 4 solgte produkter + total boks ---
+# --- Alle produkter solgt, sorteret efter omsætning ---
 st.markdown("<br>", unsafe_allow_html=True)
-cols = st.columns([1.4, 1.4, 1.4, 1.4, 1.4])
+produkt_data = df.groupby("Produkt")["Pris"].agg(["sum", "count"]).reindex(kendte_produkter, fill_value=0)
 
-top_produkter = df.groupby("Produkt")["Pris"].agg(["sum", "count"]).sort_values("sum", ascending=False).head(4)
-
-for i, (navn, row) in enumerate(reversed(list(top_produkter.iterrows()))):
+cols = st.columns(len(produkt_data))
+for i, (navn, row) in enumerate(produkt_data.iterrows()):
     cols[i].markdown(f"""
     <div style="text-align:center; padding:10px; background:white; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
       <div style="font-size:18px; font-weight:bold;">{navn}</div>
@@ -116,15 +115,6 @@ for i, (navn, row) in enumerate(reversed(list(top_produkter.iterrows()))):
       <div style="font-size:24px; font-weight:normal;">{row['sum']:,.0f} kr.</div>
     </div>
     """, unsafe_allow_html=True)
-
-# Antal produkter i 5. boks
-cols[4].markdown(f"""
-<div style="text-align:center; padding:10px; background:white; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
-  <div style="font-size:18px; font-weight:bold;">Antal produkter solgt</div>
-  <div style="font-size:24px; font-weight:normal;">{antal_solgte}</div>
-  <div style="font-size:16px;">&nbsp;</div>
-</div>
-""", unsafe_allow_html=True)
 
 # --- Total og progressbar ---
 st.markdown("<br>", unsafe_allow_html=True)
