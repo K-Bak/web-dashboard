@@ -44,7 +44,7 @@ ugevis.index = ugevis.index.map(lambda u: f"Uge {u}")
 
 # Layout og autorefresh
 st.set_page_config(page_title="Social Dashboard", layout="wide")
-st.markdown("<h1 style='text-align: center;margin-top:-50px;margin-bottom:.80px'>Social - Q2 Mål</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;margin-top:-50px;margin-bottom:-80px'>Social - Q2 Mål</h1>", unsafe_allow_html=True)
 from streamlit_autorefresh import st_autorefresh
 st_autorefresh(interval=300_000, key="datarefresh")
 
