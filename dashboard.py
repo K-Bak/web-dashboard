@@ -5,46 +5,49 @@ from datetime import datetime
 from matplotlib.patches import Wedge
 from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
-
-# --- Setup ---
 import gspread
 from gspread_dataframe import get_as_dataframe
 from google.oauth2 import service_account
 
+# --- Setup ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds_dict = st.secrets["service_account"]
 credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=scope)
 client = gspread.authorize(credentials)
 
-# --- Web-dashboard ---
+# --- Hent data ---
 SHEET_ID = "1plU6MRL7v9lkQ9VeaGJUD4ljuftZve16nPF8N6y36Kg"
 worksheet = client.open_by_key(SHEET_ID).worksheet("Salg")
 df = get_as_dataframe(worksheet, evaluate_formulas=True)
+df = df.dropna(how="all")
 
-# Fjern tomme rækker
-df = df.dropna(how='all')
-df = df[['Produkt', 'Pris', 'Dato for salg']].dropna(subset=['Produkt', 'Pris'])
-df['Dato for salg'] = pd.to_datetime(df['Dato for salg'], dayfirst=True)
-df['Uge'] = df['Dato for salg'].dt.isocalendar().week
-df['Pris'] = pd.to_numeric(df['Pris'], errors='coerce')
+# --- Opdel i salg og tilbud ---
+solgte_df = df[["Produkt", "Pris", "Dato for salg"]].dropna(subset=["Produkt", "Pris"])
+solgte_df["Dato for salg"] = pd.to_datetime(solgte_df["Dato for salg"], dayfirst=True, errors="coerce")
+solgte_df["Uge"] = solgte_df["Dato for salg"].dt.isocalendar().week
+solgte_df["Pris"] = pd.to_numeric(solgte_df["Pris"], errors="coerce")
 
-# --- Beregninger ---
-total_sum = df["Pris"].sum()
-total_count = len(df)
-q2_maal = 50000  # Juster hvis nødvendigt
-procent = total_sum / q2_maal if q2_maal else 0
+tilbud_df = df[["Produkt tilbudt", "Tilbudspris", "Dato for tilbud"]].dropna(subset=["Produkt tilbudt", "Tilbudspris", "Dato for tilbud"])
+tilbud_df["Dato for tilbud"] = pd.to_datetime(tilbud_df["Dato for tilbud"], dayfirst=True, errors="coerce")
+tilbud_df["Uge"] = tilbud_df["Dato for tilbud"].dt.isocalendar().week
+
+# --- Konstanter ---
+total_goal = 48000
+solgt_sum = solgte_df["Pris"].sum()
+total_count = len(solgte_df)
+procent = solgt_sum / total_goal if total_goal else 0
 
 # --- Ugeopsætning ---
 start_uge = 18
 slut_uge = 26
 alle_uger = list(range(start_uge, slut_uge + 1))
-ugevis = df.groupby("Uge")["Pris"].sum().reindex(alle_uger, fill_value=0)
+ugevis = solgte_df.groupby("Uge")["Pris"].sum().reindex(alle_uger, fill_value=0)
 ugevis.index = ugevis.index.map(lambda u: f"Uge {u}")
 
-# --- Restmål-beregning ---
+# --- Dynamisk ugemål ---
 nu_uge = datetime.now().isocalendar().week
 resterende_uger = len([u for u in alle_uger if u > nu_uge])
-manglende_beloeb = max(q2_maal - total_sum, 0)
+manglende_beloeb = max(total_goal - solgt_sum, 0)
 restmaal = manglende_beloeb / resterende_uger if resterende_uger > 0 else manglende_beloeb
 
 # --- Layout ---
@@ -65,11 +68,14 @@ with col1:
         ax.set_facecolor('none')
         for spine in ax.spines.values():
             spine.set_visible(False)
+
         ugevis.plot(ax=ax, marker='o', label='Realisering', color='steelblue')
 
-        ugentlig_maal = q2_maal / len(alle_uger)
-        if restmaal > 0:
-            ax.axhline(y=restmaal, color='red', linestyle='--', label='Ugemål')
+        # Tilbud sendt (stiplet grå linje)
+        tilbud_ugevis = tilbud_df.groupby("Uge")["Tilbudspris"].sum().reindex(alle_uger, fill_value=0)
+        ax.plot([f"Uge {u}" for u in tilbud_ugevis.index], tilbud_ugevis.values, linestyle='dashed', color='gray', alpha=0.5, label='Tilbud sendt')
+
+        ax.axhline(y=restmaal, color='red', linestyle='--', label='Ugemål')
 
         uge_labels = list(ugevis.index)
         if f"Uge {nu_uge}" in uge_labels:
@@ -106,33 +112,42 @@ with col2:
         ax2.text(0, 0, f"{procent*100:.2f}%", ha='center', va='center', fontsize=20)
         st.pyplot(fig2)
 
-# --- Top produkter + totalboks ---
+# --- Produkter + tilbudsboks + totalboks ---
 st.markdown("<br>", unsafe_allow_html=True)
 produktliste = [
-    "Cookie",
-    "Ekstra undersider",
-    "Tekster til undersider",
-    "Undersider med tekster",
-    "SoMe Feed Pro"
+    "Cookie", "Ekstra undersider", "Tekster til undersider",
+    "Undersider med tekster", "SoMe Feed Pro"
 ]
 
-produkt_data = df.groupby("Produkt")["Pris"].agg(["sum", "count"]).reindex(produktliste, fill_value=0)
-cols = st.columns(6)
+produkt_data = solgte_df.groupby("Produkt")["Pris"].agg(["sum", "count"]).reindex(produktliste, fill_value=0).sort_values("sum", ascending=False).head(3)
+cols = st.columns(5)
 
-for i, (navn, row) in enumerate(produkt_data.iterrows()):
-    cols[i].markdown(f"""
+for i, (navn, row) in enumerate(reversed(list(produkt_data.iterrows()))):
+    cols[2 - i].markdown(f"""
     <div style="text-align:center; padding:10px; background:white; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
       <div style="font-size:18px; font-weight:bold;">{navn}</div>
       <div style="font-size:16px;">{int(row['count'])} solgt</div>
-      <div style="font-size:24px; font-weight:normal;">{row['sum']:,.0f} kr.</div>
+      <div style="font-size:24px; font-weight:normal;">{format(row['sum'], ',.0f').replace(',', '.')} kr.</div>
     </div>
     """, unsafe_allow_html=True)
 
-cols[5].markdown(f"""
+# Tilbudsboks
+antal_tilbud = len(tilbud_df)
+total_tilbud_beloeb = tilbud_df["Tilbudspris"].sum()
+cols[3].markdown(f"""
+<div style="text-align:center; padding:10px; background:white; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+  <div style="font-size:18px; font-weight:bold;">Tilbud sendt</div>
+  <div style="font-size:16px;">{antal_tilbud} stk</div>
+  <div style="font-size:24px; font-weight:normal;">{format(total_tilbud_beloeb, ',.0f').replace(',', '.')} kr.</div>
+</div>
+""", unsafe_allow_html=True)
+
+# Totalboks
+cols[4].markdown(f"""
 <div style="text-align:center; padding:10px; background:white; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
   <div style="font-size:18px; font-weight:bold;">Antal produkter solgt</div>
-  <div style="font-size:24px; font-weight:normal;">{total_count}</div>
-  <div style="font-size:16px;">&nbsp;</div>
+  <div style="font-size:16px;">{total_count} solgt</div>
+  <div style="font-size:24px; font-weight:normal;">{format(solgt_sum, ',.0f').replace(',', '.')} kr.</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -140,10 +155,10 @@ cols[5].markdown(f"""
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown(f"""
 <div style="text-align:center; font-size:24px; font-weight:bold; margin-bottom:10px;">
-  Samlet: {total_sum:,.0f} kr.
+  Samlet: {format(solgt_sum, ',.0f').replace(',', '.')} kr.
 </div>
 """, unsafe_allow_html=True)
-progress_text = f"{total_sum:,.0f} kr. / {q2_maal:,.0f} kr."
+progress_text = f"{format(solgt_sum, ',.0f').replace(',', '.')} kr. / {format(total_goal, ',.0f').replace(',', '.')} kr."
 st.markdown(f"""
 <div style="margin-top: 20px;">
   <div style="font-size:16px; text-align:center; margin-bottom:4px;">
