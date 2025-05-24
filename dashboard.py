@@ -27,9 +27,18 @@ solgte_df["Dato for salg"] = pd.to_datetime(solgte_df["Dato for salg"], dayfirst
 solgte_df["Uge"] = solgte_df["Dato for salg"].dt.isocalendar().week
 solgte_df["Pris"] = pd.to_numeric(solgte_df["Pris"], errors="coerce")
 
-tilbud_df = df[["Produkt tilbudt", "Tilbudspris", "Dato for tilbud"]].dropna(subset=["Produkt tilbudt", "Tilbudspris", "Dato for tilbud"])
+tilbud_df = df[["Produkt tilbudt", "Tilbudspris", "Dato for tilbud", "Status"]].dropna(subset=["Produkt tilbudt", "Tilbudspris", "Dato for tilbud"])
 tilbud_df["Dato for tilbud"] = pd.to_datetime(tilbud_df["Dato for tilbud"], dayfirst=True, errors="coerce")
 tilbud_df["Uge"] = tilbud_df["Dato for tilbud"].dt.isocalendar().week
+
+# --- Rens statusfelt for stavefejl og mellemrum ---
+tilbud_df["Status"] = (
+    tilbud_df["Status"]
+    .astype(str)
+    .str.strip()
+    .str.capitalize()
+    .replace({"Aflsag": "Afslag"})
+)
 
 # --- Konstanter ---
 total_goal = 48000
@@ -87,7 +96,7 @@ with col1:
         ax.legend()
         st.pyplot(fig)
 
-# --- Donutgraf ---
+# --- Donutgraf + Hitrate ---
 with col2:
     st.subheader(" ")
     inner_cols = st.columns([0.2, 0.6, 0.2])
@@ -111,6 +120,24 @@ with col2:
 
         ax2.text(0, 0, f"{procent*100:.2f}%", ha='center', va='center', fontsize=20)
         st.pyplot(fig2)
+
+        # --- Beregn hitrate inkl. alle tilbud ---
+        q2_tilbud = tilbud_df[tilbud_df["Uge"].between(18, 26)]
+        status_renset = q2_tilbud["Status"].astype(str).str.strip().str.capitalize().replace({"Aflsag": "Afslag"})
+
+        antal_godkendt = (status_renset == "Godkendt").sum()
+        antal_afslag = (status_renset == "Afslag").sum()
+        antal_afventer = (status_renset == "Tilbud").sum()
+
+        total_tilbud = antal_godkendt + antal_afslag + antal_afventer
+        hitrate = (antal_godkendt / total_tilbud * 100) if total_tilbud > 0 else 0
+
+        st.markdown(f"""
+        <div style="text-align:center; font-size:14px; margin-top:-10px;">
+          Hitrate: {hitrate:.1f}%<br>
+          <span style="font-size:12px;">(Solgt: {antal_godkendt}, Afslag: {antal_afslag}, Tilbud: {antal_afventer})</span>
+        </div>
+        """, unsafe_allow_html=True)
 
 # --- Produkter + tilbudsboks + totalboks ---
 st.markdown("<br>", unsafe_allow_html=True)
