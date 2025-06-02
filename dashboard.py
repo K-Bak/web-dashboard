@@ -30,16 +30,16 @@ df["Status"] = (
     .replace({"Aflsag": "Afslag"})
 )
 
-df["Dato for salg"] = pd.to_datetime(df["Dato for salg"], dayfirst=True, errors="coerce")
+df["Dato"] = pd.to_datetime(df["Dato"], dayfirst=True, errors="coerce")
 df["Pris"] = pd.to_numeric(df["Pris"], errors="coerce")
-df["Uge"] = df["Dato for salg"].dt.isocalendar().week
+df["Uge"] = df["Dato"].dt.isocalendar().week
 
 solgte_df = df[df["Status"] == "Godkendt"]
 # --- Forbered tilbud_df på ny måde ---
 tilbud_df = df[df["Status"] == "Tilbud"].copy()
-tilbud_df["Dato for salg"] = pd.to_datetime(tilbud_df["Dato for salg"], dayfirst=True, errors="coerce")
+tilbud_df["Dato"] = pd.to_datetime(tilbud_df["Dato"], dayfirst=True, errors="coerce")
 tilbud_df["Pris"] = pd.to_numeric(tilbud_df["Pris"], errors="coerce")
-tilbud_df["Uge"] = tilbud_df["Dato for salg"].dt.isocalendar().week
+tilbud_df["Uge"] = tilbud_df["Dato"].dt.isocalendar().week
 
 # --- Konstanter ---
 total_goal = 48000
