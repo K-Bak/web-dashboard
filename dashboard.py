@@ -140,8 +140,16 @@ with col2:
 # --- Produkter + bokse ---
 st.markdown("<br>", unsafe_allow_html=True)
 produktliste = [
-    "Cookie", "Ekstra undersider", "Tekster til undersider",
-    "Undersider med tekster", "SoMe Feed Pro"
+    "Cookie",
+    "5 tekster",
+    "Tekster + Undersider",
+    "Ekstra undersider",
+    "SEO Starter",
+    "SoMe Feed Pro",
+    "Ekstra Sproglag",
+    "Produktvisning",
+    "Logo design",
+    "Blogfunktion",
 ]
 produkt_data = solgte_df.groupby("Produkt")["Pris"].agg(["sum", "count"]).reindex(produktliste, fill_value=0).sort_values("sum", ascending=False).head(3)
 cols = st.columns(5)
